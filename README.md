@@ -66,6 +66,6 @@ print(answer)  # Output: "the lazy dog"
 ```
 
 ## 📌 TODO
-Add hyperparameter tuning
-Enable CLI or API inference
-Deploy model via FastAPI
+- Add hyperparameter tuning
+- Enable CLI or API inference
+-  Deploy model via FastAPI
