@@ -24,10 +24,6 @@
 └── requirements.txt       # Dependencies
 ```
 
-text
-
-Copy
-
 ---
 
 ## 🛠️ Setup Instructions
@@ -70,4 +66,4 @@ print(answer)  # Output: "the lazy dog"
 ## 📌 TODO
 - Add hyperparameter tuning
 - Enable CLI or API inference
--  Deploy model via FastAPI
+- Deploy model via FastAPI
