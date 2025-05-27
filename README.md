@@ -15,12 +15,14 @@
 ---
 
 ## 🗂️ Project Structure
+```text
 ├── spanbert-crf.ipynb     # Main notebook (training + evaluation)
 ├── data/                  # Processed dataset (optional)
 ├── models/                # Saved weights and tokenizer
 ├── outputs/               # Logs and predictions
 ├── README.md              # Project documentation
 └── requirements.txt       # Dependencies
+```
 
 text
 
