@@ -29,11 +29,11 @@
 ## 🛠️ Setup Instructions
 
 1. **Clone the repository**:
- - git clone [https://github.com/yourusername/spanbert-crf.git](https://github.com/riju-talk/SpanBERT-CRF.git) 
- - cd spanbert-crf
+  - git clone [https://github.com/yourusername/spanbert-crf.git](https://github.com/riju-talk/SpanBERT-CRF.git) 
+  - cd spanbert-crf
 
 2. **Install dependencies**:
-pip install -r requirements.txt
+   pip install -r requirements.txt
 
 3. **Run the notebook**:
 
