@@ -29,7 +29,7 @@
 ## 🛠️ Setup Instructions
 
 1. **Clone the repository**:
-git clone https://github.com/yourusername/spanbert-crf.git
+git clone [https://github.com/yourusername/spanbert-crf.git](https://github.com/riju-talk/SpanBERT-CRF.git)
 cd spanbert-crf
 
 **Install dependencies**:
