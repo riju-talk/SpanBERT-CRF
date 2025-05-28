@@ -18,8 +18,8 @@
 
 ```text
 ├── spanbert-crf.ipynb          # Main training/evaluation notebook
-├── data/                       # Processed datasets (optional)
-├── models/                     # Saved model weights & tokenizer
+├── data/                       # Dataset-copy (optional)
+├── models/                     # Saved model and checkpoints with weights & tokenizer
 ├── outputs/                    # Training logs & prediction outputs
 ├── README.md                   # Project documentation
 └── requirements.txt            # Python dependencies
