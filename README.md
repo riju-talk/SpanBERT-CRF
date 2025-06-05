@@ -50,11 +50,8 @@
 ---
 
 ## 📊 Evaluation Metrics
-
-- **F1 Score**: 86.5 (dev set)
-- **Exact Match (EM)**: 79.2 (dev set)
-- **Answerability Accuracy**: 84.3% 
-
+- **Exact Match (EM)**: 90% (dev set, Base Model 90% using trainer objects from HuggingFace)
+- **Exact Match (EM)**: 57% (dev set, Base Model 90% using trainer objects from HuggingFace)
 ---
 
 ## 🤖 Inference Example
