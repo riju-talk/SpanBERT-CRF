@@ -51,7 +51,7 @@
 
 ## 📊 Evaluation Metrics
 - **Exact Match (EM)**: 90% (dev set, Base Model 90% using trainer objects from HuggingFace)
-- **Exact Match (EM)**: 57% (dev set, Base Model 90% using trainer objects from HuggingFace)
+- **Exact Match (EM)**: 57% (dev set, SPANBERT-CRF Model 90% using trainer objects from HuggingFace)
 ---
 
 ## 🤖 Inference Example
