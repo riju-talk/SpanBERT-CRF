@@ -1,0 +1,58 @@
+[project]
+name = "spanbert-crf"
+version = "1.0.0"
+description = "SpanBERT-CRF: Unified NLP Architecture for QA and NER with LoRA"
+readme = "README.md"
+authors = [
+    { name = "Riju" },
+]
+license = { text = "MIT" }
+requires-python = "==3.12.*"
+dependencies = [
+    "transformers",
+    "torch",
+    "scikit-learn",
+    "numpy",
+    "pandas",
+    "tqdm",
+    "matplotlib",
+    "seaborn",
+    "python-multipart",
+    "pytest",
+    "jupyter",
+    "tensorboard",
+    "wandb",
+    "evaluate",
+    "peft",
+    "huggingface_hub",
+    "seqeval",
+    "bert-score>=0.3.13",
+    "sacrebleu>=2.6.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["src*", "api*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 120
+target-version = ["py38"]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]

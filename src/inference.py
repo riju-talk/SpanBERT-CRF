@@ -3,14 +3,14 @@ Inference utilities for QA and NER tasks.
 """
 
 import torch
-from transformers import SpanBertTokenizer
+from transformers import AutoTokenizer
 from typing import List, Dict, Tuple, Optional
 
 
 class QAInference:
     """Question Answering inference with SpanBERT-CRF."""
     
-    def __init__(self, model, tokenizer: SpanBertTokenizer, device: str = 'cuda',
+    def __init__(self, model, tokenizer: AutoTokenizer, device: str = 'cuda',
                  max_length: int = 512):
         self.model = model
         self.tokenizer = tokenizer
@@ -107,7 +107,7 @@ class QAInference:
 class NERInference:
     """Named Entity Recognition inference with SpanBERT-CRF."""
     
-    def __init__(self, model, tokenizer: SpanBertTokenizer, 
+    def __init__(self, model, tokenizer: AutoTokenizer, 
                  id2label: Dict[int, str], device: str = 'cuda',
                  max_length: int = 512):
         self.model = model
@@ -231,10 +231,10 @@ def load_inference_model(model_path: str, task_type: str = 'qa',
     """
     from src.models import SpanBERTForQA, SpanBERTForNER
     
-    tokenizer = SpanBertTokenizer.from_pretrained('spanbert-base-cased')
+    tokenizer = AutoTokenizer.from_pretrained('SpanBERT/spanbert-base-cased')
     
     if task_type == 'qa':
-        model = SpanBERTForQA.from_pretrained('spanbert-base-cased', use_crf=use_crf)
+        model = SpanBERTForQA(use_crf=use_crf, model_name='SpanBERT/spanbert-base-cased')
         checkpoint = torch.load(model_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         return QAInference(model, tokenizer, device)
@@ -244,8 +244,7 @@ def load_inference_model(model_path: str, task_type: str = 'qa',
             0: 'O', 1: 'B-PER', 2: 'I-PER', 3: 'B-ORG', 4: 'I-ORG',
             5: 'B-LOC', 6: 'I-LOC', 7: 'B-MISC', 8: 'I-MISC'
         }
-        model = SpanBERTForNER.from_pretrained('spanbert-base-cased', 
-                                               num_ner_tags=9, use_crf=use_crf)
+        model = SpanBERTForNER(num_ner_tags=9, use_crf=use_crf, model_name='SpanBERT/spanbert-base-cased')
         checkpoint = torch.load(model_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         return NERInference(model, tokenizer, id2label, device)

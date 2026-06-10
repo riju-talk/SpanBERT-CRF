@@ -4,7 +4,7 @@ Data loading and preprocessing utilities for QA and NER tasks.
 
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import SpanBertTokenizer
+from transformers import AutoTokenizer
 from datasets import load_dataset
 from typing import Dict, List, Tuple, Optional
 import numpy as np
@@ -13,7 +13,7 @@ import numpy as np
 class QADataset(Dataset):
     """Dataset for Question Answering (SQuAD format)."""
     
-    def __init__(self, data, tokenizer: SpanBertTokenizer, max_length: int = 512):
+    def __init__(self, data, tokenizer: AutoTokenizer, max_length: int = 512):
         self.data = data
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -69,7 +69,7 @@ class QADataset(Dataset):
 class NERDataset(Dataset):
     """Dataset for Named Entity Recognition."""
     
-    def __init__(self, data, tokenizer: SpanBertTokenizer, 
+    def __init__(self, data, tokenizer: AutoTokenizer, 
                  label_map: Dict[str, int], max_length: int = 512):
         self.data = data
         self.tokenizer = tokenizer
@@ -115,7 +115,7 @@ class NERDataset(Dataset):
 
 def load_squad_data(split: str = 'train', max_samples: Optional[int] = None):
     """Load SQuAD v2.0 dataset."""
-    dataset = load_dataset('squad_v2', split=split)
+    dataset = load_dataset('rajpurkar/squad_v2', split=split)
     
     if max_samples:
         dataset = dataset.select(range(min(max_samples, len(dataset))))
@@ -143,7 +143,7 @@ def load_squad_data(split: str = 'train', max_samples: Optional[int] = None):
 
 def load_conll_ner_data(split: str = 'train', max_samples: Optional[int] = None):
     """Load CoNLL-2003 NER dataset."""
-    dataset = load_dataset('conll2003', split=split)
+    dataset = load_dataset('eriktks/conll2003', split=split)
     
     if max_samples:
         dataset = dataset.select(range(min(max_samples, len(dataset))))
