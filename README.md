@@ -1,370 +1,291 @@
-# SpanBERT-CRF: Unified NLP Architecture for Question Answering and Named Entity Recognition
+<div align="center">
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
-[![Transformers](https://img.shields.io/badge/Transformers-4.35+-ff9d00.svg)](https://huggingface.co/transformers/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+# SpanBERT‑CRF
 
-## 📋 Overview
+**A linear‑chain CRF on top of SpanBERT for span‑structured NLP — Question Answering *and* Named Entity Recognition.**
 
-This repository implements a **production-ready NLP architecture** combining **SpanBERT** with **Conditional Random Fields (CRF)** for improved span-based predictions in:
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Transformers](https://img.shields.io/badge/🤗%20Transformers-4.x-FFD21E)](https://huggingface.co/docs/transformers)
+[![uv](https://img.shields.io/badge/packaged%20with-uv-DE5FE9?logo=uv&logoColor=white)](https://github.com/astral-sh/uv)
+[![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](tests/)
+[![Code style](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- **Question Answering (QA)** - SQuAD v2.0 dataset
-- **Named Entity Recognition (NER)** - CoNLL-2003 dataset
+[![Open QA notebook in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/riju-talk/SpanBERT-CRF/blob/main/spanbert-crf.ipynb)
+[![Model on HF Hub](https://img.shields.io/badge/🤗%20Hub-Phantomcloak19%2FSpanBERT--CRF-blue)](https://huggingface.co/Phantomcloak19/SpanBERT-CRF)
 
-The CRF layer enhances boundary detection by modeling dependencies between start/end positions (QA) or entity tags (NER), resulting in more coherent predictions.
-
----
-
-## 🚀 Key Features
-
-### Model Architecture
-- **Fine-tuned SpanBERT**: State-of-the-art span representation learning
-- **CRF Enhancement**: Joint modeling of span boundaries with transition constraints
-- **Dual Task Support**: Unified architecture for both QA and NER
-- **SQuAD v2.0 Ready**: Handles answerable and unanswerable questions
-
-### Engineering Features
-- **Modular Design**: Clean separation of models, data, training, and inference
-- **Production API**: FastAPI server with batch processing support
-- **Comprehensive Metrics**: EM, F1, Precision, Recall calculations
-- **Experiment Tracking**: Optional Weights & Biases integration
-- **Unit Tests**: Pytest test suite for core components
+</div>
 
 ---
 
-## 🗂️ Project Structure
+## Table of Contents
+
+- [Why SpanBERT‑CRF](#why-spanbertcrf)
+- [How it works](#how-it-works)
+- [Project layout](#project-layout)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+  - [`main.py` — full pipeline](#mainpy--full-pipeline)
+  - [`src.train` — single task](#srctrain--single-task)
+  - [Standalone notebook](#standalone-notebook)
+- [Inference](#inference)
+- [Evaluation & metrics](#evaluation--metrics)
+- [Testing](#testing)
+- [Configuration reference](#configuration-reference)
+- [Roadmap](#roadmap)
+- [Acknowledgments](#acknowledgments)
+- [License](#license)
+
+---
+
+## Why SpanBERT‑CRF
+
+[SpanBERT](https://arxiv.org/abs/1907.10529) pre‑trains by masking and predicting
+contiguous **spans** rather than individual tokens, which makes it a strong
+encoder for anything span‑shaped. This repo adds a **linear‑chain CRF** decoding
+layer so that predictions are *globally consistent sequences* instead of
+independent per‑token choices:
+
+- **NER** — the CRF learns that `I-PER` cannot follow `B-LOC`, that entities
+  start with `B-`, etc., and Viterbi decoding returns the single best valid tag
+  path.
+- **QA** — the answer span is recast as a 3‑tag BIO problem
+  (`O` / `B-ANS` / `I-ANS`) over the sequence. The CRF enforces one contiguous
+  run, and an all‑`O` decode is a first‑class prediction for **unanswerable**
+  SQuAD v2.0 questions.
+
+One encoder, one CRF abstraction, two tasks.
+
+---
+
+## How it works
+
+```
+                       ┌───────────────────────────┐
+  question + context   │                           │   BIO emissions   ┌─────┐   Viterbi   answer span
+  (QA)  ───────────────▶      SpanBERT encoder      ├───────────────────▶ CRF ├────────────▶  or  "unanswerable"
+  raw tokens (NER)  ───▶   (SpanBERT/spanbert-      │   (B, L, num_tags)└─────┘             / entity list
+                       │        base-cased)         │
+                       └───────────────────────────┘
+```
+
+| | Question Answering | Named Entity Recognition |
+|---|---|---|
+| Dataset | SQuAD v2.0 (`rajpurkar/squad_v2`) | CoNLL‑2003 (`eriktks/conll2003`, parquet export) |
+| CRF tag set | `O`, `B-ANS`, `I-ANS` | `O`, `B-/I-` × {PER, ORG, LOC, MISC} |
+| Loss | CRF negative log‑likelihood over BIO span | CRF negative log‑likelihood over entity tags |
+| Decode | Viterbi → first `B-ANS …` run → detokenised text | Viterbi → BIO → entity offsets |
+| Metrics | Exact Match, token‑F1 (+ BLEU, BERTScore) | entity‑level precision / recall / F1 |
+
+The CRF (`src/models.py::CRF`) is a from‑scratch batch‑first implementation:
+forward‑algorithm partition function, gold‑path scoring with masking, and
+Viterbi decoding with back‑pointers. Its NLL is unit‑tested against brute‑force
+path enumeration (`tests/test_crf.py`).
+
+Optional **LoRA** adapters (via `peft`) keep the encoder frozen and train only
+low‑rank deltas plus the task head and CRF.
+
+---
+
+## Project layout
 
 ```text
 SpanBERT-CRF/
+├── main.py                 # ⟵ unified orchestrator: runs the whole QA + NER pipeline
 ├── src/
-│   ├── __init__.py
-│   ├── models.py          # SpanBERT + CRF model architectures
-│   ├── data.py            # Dataset classes and data loading
-│   ├── metrics.py         # Evaluation metrics (EM, F1, P/R/F1)
-│   ├── train.py           # Training loop and utilities
-│   └── inference.py       # Inference pipelines for QA and NER
-├── api/
-│   └── main.py            # FastAPI REST API server
+│   ├── models.py           # CRF, SpanBERTForQA (CRF/BIO), SpanBERTForNER, LoRA helper
+│   ├── data.py             # SQuAD v2 + CoNLL-2003 loaders, QADataset / NERDataset
+│   ├── train.py            # Trainer + per-task CLI (python -m src.train ...)
+│   ├── metrics.py          # EM / F1 / BLEU / BERTScore (QA), P/R/F1 (NER), Evaluator
+│   └── inference.py        # QAInference / NERInference pipelines + loader
 ├── tests/
-│   └── test_models.py     # Unit tests
-├── models/                 # Saved model checkpoints
-├── outputs/                # Training logs and predictions
-├── data/                   # Dataset cache (optional)
-├── spanbert-crf.ipynb     # Jupyter notebook with experiments
-├── train.py               # Main training script
-├── requirements.txt       # Python dependencies
-└── README.md              # This file
+│   ├── conftest.py         # fixtures, `slow` marker, encoder-availability skip
+│   ├── test_crf.py         # CRF vs brute-force, masking, Viterbi
+│   ├── test_models.py      # BIO span helpers + (slow) full-model forward/backward
+│   ├── test_metrics.py     # QA & NER scoring
+│   ├── test_data.py        # tensorisation, label alignment, dataloaders
+│   └── test_pipeline.py    # main.py config resolution & dry-run
+├── spanbert-crf.ipynb      # standalone Colab notebook (QA + NER, no src/ dependency)
+├── models/                 # checkpoints (git-ignored except tracked baselines)
+├── hf_upload_qa/            # exported QA artifact staged for the HF Hub
+├── pyproject.toml          # deps + tooling (managed with uv)
+└── uv.lock
 ```
 
 ---
 
-## 🛠️ Installation
+## Installation
 
-### 1. Clone the Repository
+Requires **Python 3.12**. The project is managed with [uv](https://github.com/astral-sh/uv).
+
 ```bash
 git clone https://github.com/riju-talk/SpanBERT-CRF.git
 cd SpanBERT-CRF
+
+# with uv (recommended) — creates .venv and installs from uv.lock
+uv sync
+
+# or with pip
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
-### 2. Create Virtual Environment (Recommended)
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+Verify:
 
-### 3. Install Dependencies
 ```bash
-pip install -r requirements.txt
-```
-
-### 4. Verify Installation
-```bash
-python -c "import torch; import transformers; print('✓ Setup complete')"
+python -c "import torch, transformers; print('torch', torch.__version__, '| cuda', torch.cuda.is_available())"
+pytest -m "not slow" -q
 ```
 
 ---
 
-## 📊 Usage
+## Quick start
 
-### Quick Start: Training
+### `main.py` — full pipeline
 
-#### Train QA Model (SQuAD v2.0)
+`main.py` is the single entry point that trains **both** models end to end
+(QA on SQuAD v2.0, then NER on CoNLL‑2003), writes a checkpoint per stage, and
+drops a consolidated `models/pipeline_report.json`.
+
 ```bash
-# Base SpanBERT
-python train.py --task qa --num_epochs 3 --batch_size 16 --use_wandb
+# full run with defaults (CRF on for both tasks)
+python main.py
 
-# With CRF enhancement
-python train.py --task qa --num_epochs 3 --batch_size 16 --use_crf --use_wandb
+# small, fast configuration
+python main.py --max-train-samples 3000 --max-eval-samples 800 --num-epochs 3
+
+# NER only, with LoRA
+python main.py --tasks ner --use-lora --lora-r 16
+
+# validate wiring without training
+python main.py --dry-run
+
+# train both and push each checkpoint to the HF Hub
+python main.py --upload
 ```
 
-#### Train NER Model (CoNLL-2003)
-```bash
-# Base SpanBERT
-python train.py --task ner --num_epochs 5 --batch_size 16
+The CRF head is part of the architecture and **on by default**; `--no-crf` is
+available purely for ablation.
 
-# With CRF enhancement
-python train.py --task ner --num_epochs 5 --batch_size 16 --use_crf
+### `src.train` — single task
+
+For one task at a time with the lower‑level CLI:
+
+```bash
+python -m src.train --task qa  --use_crf --num_epochs 3 --batch_size 16
+python -m src.train --task ner --use_crf --num_epochs 10 --batch_size 16 --use_lora
 ```
 
-### Training Options
+### Standalone notebook
 
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `--task` | `qa` | Task type: `qa` or `ner` |
-| `--use_crf` | `False` | Enable CRF layer |
-| `--batch_size` | `16` | Training batch size |
-| `--learning_rate` | `2e-5` | Learning rate |
-| `--num_epochs` | `3` | Number of epochs |
-| `--max_length` | `512` | Max sequence length |
-| `--max_samples` | `None` | Limit samples (debugging) |
-| `--use_wandb` | `False` | Enable W&B logging |
+[`spanbert-crf.ipynb`](spanbert-crf.ipynb) is fully self‑contained — the CRF,
+both model heads, the data pipeline and the training loop are defined in the
+notebook itself, so it runs on Colab with nothing but
+`pip install torch transformers datasets seqeval`. It fine‑tunes SpanBERT‑CRF on
+a **subset** of SQuAD v2.0 and CoNLL‑2003 and reports EM/F1 and entity‑level F1.
 
 ---
 
-### Inference Examples
+## Inference
 
-#### Question Answering
 ```python
 from src.inference import load_inference_model
 
-# Load trained model
-qa_pipeline = load_inference_model(
-    'models/spanbert_qa_crf.pt',
-    task_type='qa',
-    use_crf=True
-)
+# Question Answering
+qa = load_inference_model("models/spanbert_qa_crf_base.pt", task_type="qa", use_crf=True)
+print(qa.predict(
+    context="SpanBERT was introduced by Joshi et al. in 2020.",
+    question="Who introduced SpanBERT?",
+))
+# -> {'answer': 'Joshi et al.', 'confidence': ..., 'start_token': ..., ...}
 
-# Predict answer
-context = "The quick brown fox jumps over the lazy dog."
-question = "What does the fox jump over?"
-
-result = qa_pipeline.predict(context, question)
-print(f"Answer: {result['answer']}")
-print(f"Confidence: {result['confidence']:.4f}")
+# Named Entity Recognition
+ner = load_inference_model("models/spanbert_ner_crf_base.pt", task_type="ner", use_crf=True)
+print(ner.predict("Apple was founded by Steve Jobs in Cupertino."))
+# -> [{'type': 'ORG', 'text': 'Apple'}, {'type': 'PER', 'text': 'Steve Jobs'}, {'type': 'LOC', 'text': 'Cupertino'}]
 ```
 
-#### Named Entity Recognition
-```python
-from src.inference import load_inference_model
-
-# Load trained model
-ner_pipeline = load_inference_model(
-    'models/spanbert_ner_crf.pt',
-    task_type='ner',
-    use_crf=True
-)
-
-# Extract entities
-text = "Apple Inc. was founded by Steve Jobs in Cupertino, California."
-entities = ner_pipeline.predict(text)
-
-for entity in entities:
-    print(f"{entity['text']}: {entity['type']}")
-```
+The custom `SpanBERTForQA` / `SpanBERTForNER` modules are also serialised to the
+Hugging Face Hub as `state_dict` + `config.json` + tokenizer
+(`src/train.py::upload_to_huggingface`).
 
 ---
 
-### REST API
+## Evaluation & metrics
 
-#### Start the Server
-```bash
-python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-```
+`src/metrics.py` provides:
 
-#### API Endpoints
+| Task | Metrics |
+|------|---------|
+| QA | Exact Match, token‑level F1, corpus BLEU (`sacrebleu`), BERTScore F1 (optional), span‑overlap |
+| NER | entity‑level precision / recall / F1 (strict BIO span match) |
 
-**Question Answering**
-```bash
-curl -X POST "http://localhost:8000/qa" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "context": "Paris is the capital of France.",
-    "question": "What is the capital of France?"
-  }'
-```
-
-**Named Entity Recognition**
-```bash
-curl -X POST "http://localhost:8000/ner" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Elon Musk founded SpaceX in Hawthorne, California."
-  }'
-```
-
-**Batch Processing**
-```bash
-curl -X POST "http://localhost:8000/qa/batch" \
-  -H "Content-Type: application/json" \
-  -d '[
-    {"context": "...", "question": "..."},
-    {"context": "...", "question": "..."}
-  ]'
-```
-
-**Interactive Docs**: Visit `http://localhost:8000/docs`
+`evaluate_on_split(...)` refuses to score the `train` split by design.
 
 ---
 
-## 📈 Performance Metrics
-
-### Question Answering (SQuAD v2.0 Dev Set)
-
-| Model | Exact Match | F1 Score |
-|-------|-------------|----------|
-| SpanBERT Base | ~75-80% | ~82-85% |
-| SpanBERT + CRF | ~77-82% | ~84-87% |
-
-*Note: Results may vary based on hyperparameters and training duration.*
-
-### Named Entity Recognition (CoNLL-2003 Test Set)
-
-| Model | Precision | Recall | F1 Score |
-|-------|-----------|--------|----------|
-| SpanBERT Base | ~91% | ~90% | ~90.5% |
-| SpanBERT + CRF | ~92% | ~91% | ~91.5% |
-
-### Reported Results from Notebook
-- **Base Model EM**: 90% (using HuggingFace trainer)
-- **SpanBERT-CRF EM**: 43-57% (custom implementation, room for improvement)
-
----
-
-## 🔬 Model Architecture Details
-
-### SpanBERT + CRF for QA
-
-```
-Input (Question + Context)
-    ↓
-SpanBERT Encoder
-    ↓
-Linear Projection → [Start Logits, End Logits]
-    ↓
-CRF Layer (Optional)
-    ↓
-Viterbi Decoding → Best Span
-```
-
-### SpanBERT + CRF for NER
-
-```
-Input Text
-    ↓
-SpanBERT Encoder
-    ↓
-Linear Projection → Tag Emissions
-    ↓
-CRF Layer
-    ↓
-Viterbi Decoding → Best Tag Sequence
-```
-
-### CRF Benefits
-- Models transitions between labels (e.g., I-PER cannot follow B-LOC)
-- Enforces valid BIO tagging schemes
-- Improves boundary coherence
-
----
-
-## 🧪 Running Tests
+## Testing
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test class
-pytest tests/test_models.py::TestCRF -v
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
+pytest -m "not slow"     # fast: CRF, metrics, data, pipeline config  (no weights, seconds)
+pytest -m slow           # full-model forward/backward (needs the SpanBERT encoder)
+pytest                    # everything
+pytest --cov=src --cov-report=term-missing
 ```
 
----
-
-## 📝 Reproducing Results
-
-### From Jupyter Notebook
-The included `spanbert-crf.ipynb` contains the original experimental setup:
-
-1. Open notebook in Jupyter/Colab
-2. Install required packages
-3. Run cells sequentially
-4. Results logged to notebook output
-
-### Using Training Script
-For reproducible experiments:
-
-```bash
-# Set random seed
-export PYTHONHASHSEED=42
-
-# Train with fixed hyperparameters
-python train.py \
-  --task qa \
-  --use_crf \
-  --batch_size 16 \
-  --learning_rate 2e-5 \
-  --num_epochs 3 \
-  --max_length 384 \
-  --use_wandb
-```
+Slow tests skip themselves automatically when `SpanBERT/spanbert-base-cased`
+cannot be loaded (offline CI with a cold cache).
 
 ---
 
-## 🛣️ Roadmap
+## Configuration reference
 
-- [x] Core model architecture (SpanBERT + CRF)
-- [x] Training pipeline for QA and NER
-- [x] Evaluation metrics (EM, F1, P/R/F1)
-- [x] Inference utilities
-- [x] FastAPI deployment
-- [x] Unit tests
-- [ ] Hyperparameter optimization (Optuna integration)
-- [ ] Multi-GPU training support
-- [ ] Docker containerization
-- [ ] ONNX export for production
-- [ ] Additional datasets (HotpotQA, Natural Questions, OntoNotes)
-- [ ] Model compression (distillation, quantization)
+`main.py` flags (see `python main.py --help` for the full list):
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--tasks` | `qa ner` | Stages to run, in order |
+| `--no-crf` | *(CRF on)* | Ablation: drop the CRF head |
+| `--use-lora` / `--lora-r` / `--lora-alpha` | off / 8 / 32 | LoRA fine‑tuning |
+| `--max-train-samples` / `--max-eval-samples` | 15000 / 5000 | Per‑stage caps (`-1` = full split) |
+| `--max-length` | 384 | Max sequence length (NER is capped at 256) |
+| `--batch-size` / `--learning-rate` / `--num-epochs` | 16 / 2e‑5 / 3 | Optimisation |
+| `--gradient-accumulation` | 1 | Micro‑batching |
+| `--device` | auto | `cuda` / `cpu` |
+| `--seed` | 42 | Reproducibility |
+| `--output-dir` | `models` | Checkpoints + `pipeline_report.json` |
+| `--use-wandb` | off | Weights & Biases logging |
+| `--upload` / `--hf-repo-qa` / `--hf-repo-ner` | off | Push checkpoints to the HF Hub |
 
 ---
 
-## 📄 License
+## Roadmap
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **SpanBERT**: [Joshi et al., 2020](https://arxiv.org/abs/1907.10529)
-- **CRF Implementation**: Inspired by pytorch-crf
-- **Datasets**: 
-  - [SQuAD v2.0](https://rajpurkar.github.io/SQuAD-explorer/)
-  - [CoNLL-2003](https://aclweb.org/aclwiki/CoNLL-2003_Named_Entity_Recognition)
-- **Hugging Face Transformers**: For the excellent library
-
----
-
-## 📧 Contact
-
-For questions or collaborations, please open an issue or contact the maintainer.
+- [x] From‑scratch linear‑chain CRF (forward algorithm + Viterbi), brute‑force verified
+- [x] SpanBERT‑CRF for **NER** (CoNLL‑2003)
+- [x] SpanBERT‑CRF for **QA** via BIO span tagging (SQuAD v2.0, unanswerable‑aware)
+- [x] Unified `main.py` orchestrator + per‑task `src.train` CLI
+- [x] LoRA / PEFT fine‑tuning
+- [x] Standalone Colab notebook
+- [x] Test suite (fast unit + slow integration)
+- [ ] FastAPI serving layer
+- [ ] Hyper‑parameter search (Optuna)
+- [ ] Multi‑GPU / mixed precision
+- [ ] ONNX export & quantisation
+- [ ] More datasets (OntoNotes, Natural Questions)
 
 ---
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/riju-talk/SpanBERT-CRF/blob/main/spanbert-crf.ipynb)
+## Acknowledgments
 
-**Built with ❤️ for the NLP community**
+- **SpanBERT** — [Joshi et al., 2020](https://arxiv.org/abs/1907.10529)
+- **CRF for sequence labelling** — [Lafferty et al., 2001](https://repository.upenn.edu/cis_papers/159/); implementation inspired by [`pytorch-crf`](https://github.com/kmkurn/pytorch-crf)
+- **Datasets** — [SQuAD v2.0](https://rajpurkar.github.io/SQuAD-explorer/), [CoNLL‑2003](https://www.clips.uantwerpen.be/conll2003/ner/)
+- **🤗 Transformers, Datasets, PEFT**
+
+---
+
+## License
+
+[MIT](LICENSE) © Riju

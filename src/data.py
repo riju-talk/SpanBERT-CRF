@@ -141,32 +141,93 @@ def load_squad_data(split: str = 'train', max_samples: Optional[int] = None):
     return processed_data
 
 
+CONLL_LABEL_MAP = {
+    'O': 0,
+    'B-PER': 1, 'I-PER': 2,
+    'B-ORG': 3, 'I-ORG': 4,
+    'B-LOC': 5, 'I-LOC': 6,
+    'B-MISC': 7, 'I-MISC': 8,
+}
+
+
 def load_conll_ner_data(split: str = 'train', max_samples: Optional[int] = None):
-    """Load CoNLL-2003 NER dataset."""
-    dataset = load_dataset('eriktks/conll2003', split=split)
-    
-    if max_samples:
-        dataset = dataset.select(range(min(max_samples, len(dataset))))
-    
-    label_map = {
-        'O': 0,
-        'B-PER': 1, 'I-PER': 2,
-        'B-ORG': 3, 'I-ORG': 4,
-        'B-LOC': 5, 'I-LOC': 6,
-        'B-MISC': 7, 'I-MISC': 8
-    }
-    
+    """Load the CoNLL-2003 NER dataset.
+
+    Primary source is the Hugging Face Hub (the auto-generated parquet export of
+    ``eriktks/conll2003``, which needs no dataset script). If the Hub is
+    unreachable it falls back to parsing raw CoNLL-format text files.
+
+    Returns ``(examples, label_map)`` where each example is
+    ``{"tokens": [...], "ner_tags": ["O", "B-PER", ...]}``.
+    """
+    label_map = dict(CONLL_LABEL_MAP)
+    hf_split = {'train': 'train', 'validation': 'validation', 'test': 'test'}[split]
+
+    try:
+        dataset = load_dataset(
+            'eriktks/conll2003', split=hf_split, revision='refs/convert/parquet'
+        )
+        tag_names = dataset.features['ner_tags'].feature.names
+        if max_samples:
+            dataset = dataset.select(range(min(max_samples, len(dataset))))
+        processed_data = [
+            {"tokens": list(ex['tokens']),
+             "ner_tags": [tag_names[t] for t in ex['ner_tags']]}
+            for ex in dataset
+        ]
+        return processed_data, label_map
+    except Exception as exc:  # offline / Hub issues -> raw text fallback
+        print(f"HF load failed ({type(exc).__name__}); falling back to raw text files...")
+
+    import os
+    import tempfile
+    import urllib.request
+
+    file_split = {'train': 'train', 'validation': 'valid', 'test': 'test'}[split]
+    urls = [
+        f"https://raw.githubusercontent.com/glample/tagger/master/dataset/eng.{file_split}",
+        f"https://data.deepai.org/conll2003/{file_split}.txt",
+    ]
+
+    cache_dir = os.path.join(tempfile.gettempdir(), "spanbert_crf_conll2003")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"{file_split}.txt")
+
+    if not os.path.exists(cache_path):
+        last_err = None
+        for url in urls:
+            try:
+                print(f"Downloading CoNLL-2003 {split} split from {url} ...")
+                urllib.request.urlretrieve(url, cache_path)
+                break
+            except Exception as e:  # try the next mirror
+                last_err = e
+        else:
+            raise RuntimeError(
+                "Could not obtain CoNLL-2003 from the Hub or any text mirror"
+            ) from last_err
+
     processed_data = []
-    for example in dataset:
-        tokens = example['tokens']
-        ner_tags = [dataset.features['ner_tags'].feature.int2str(tag) 
-                   for tag in example['ner_tags']]
-        
-        processed_data.append({
-            'tokens': tokens,
-            'ner_tags': ner_tags
-        })
-    
+    with open(cache_path, "r", encoding="utf-8") as f:
+        tokens, ner_tags = [], []
+        for line in f:
+            line = line.strip()
+            if line == "" or line.startswith("-DOCSTART-"):
+                if tokens:
+                    processed_data.append({"tokens": tokens, "ner_tags": ner_tags})
+                    tokens, ner_tags = [], []
+                continue
+            parts = line.split()
+            if len(parts) >= 4:
+                tokens.append(parts[0])
+                ner_tags.append(parts[-1])
+
+    if tokens:
+        processed_data.append({"tokens": tokens, "ner_tags": ner_tags})
+
+    if max_samples:
+        processed_data = processed_data[:max_samples]
+
     return processed_data, label_map
 
 

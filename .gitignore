@@ -1,4 +1,3 @@
-```
 # Python
 __pycache__/
 *.pyc
@@ -18,6 +17,7 @@ pip-delete-this-directory.txt
 
 # Testing
 .coverage
+.coverage*
 coverage/
 htmlcov/
 .nosetests
@@ -31,11 +31,7 @@ build/
 *.egg-info/
 .eggs/
 .installed.cfg
-*.egg-info/
-.installed.cfg
 *.egg-link
-.egg-info/
-.eggs/
 
 # IDE
 .vscode/
@@ -51,6 +47,24 @@ Thumbs.db
 # Logs
 *.log
 
-# Coverage
-.coverage*
-```
+# Claude Code
+.claude/
+CLAUDE.local.md
+.claude-session*
+*.claude.json
+
+# Model weights / large binaries (push to Hugging Face, not git)
+*.pt
+*.pth
+*.bin
+*.onnx
+*.h5
+*.safetensors
+*.ckpt
+*.pkl
+*.gguf
+models/
+hf_upload_qa/
+hf_upload_*/
+checkpoints/
+wandb/
