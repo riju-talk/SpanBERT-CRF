@@ -10,7 +10,6 @@
 [![uv](https://img.shields.io/badge/packaged%20with-uv-DE5FE9?logo=uv&logoColor=white)](https://github.com/astral-sh/uv)
 [![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](tests/)
 [![Code style](https://img.shields.io/badge/code%20style-black-000000)](https://github.com/psf/black)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [![Open QA notebook in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/riju-talk/SpanBERT-CRF/blob/main/spanbert-crf.ipynb)
 [![Model on HF Hub](https://img.shields.io/badge/🤗%20Hub-Phantomcloak19%2FSpanBERT--CRF-blue)](https://huggingface.co/Phantomcloak19/SpanBERT-CRF)
@@ -24,18 +23,12 @@
 - [Why SpanBERT‑CRF](#why-spanbertcrf)
 - [How it works](#how-it-works)
 - [Project layout](#project-layout)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-  - [`main.py` — full pipeline](#mainpy--full-pipeline)
-  - [`src.train` — single task](#srctrain--single-task)
-  - [Standalone notebook](#standalone-notebook)
 - [Inference](#inference)
 - [Evaluation & metrics](#evaluation--metrics)
 - [Testing](#testing)
 - [Configuration reference](#configuration-reference)
 - [Roadmap](#roadmap)
 - [Acknowledgments](#acknowledgments)
-- [License](#license)
 
 ---
 
@@ -112,78 +105,6 @@ SpanBERT-CRF/
 ├── pyproject.toml          # deps + tooling (managed with uv)
 └── uv.lock
 ```
-
----
-
-## Installation
-
-Requires **Python 3.12**. The project is managed with [uv](https://github.com/astral-sh/uv).
-
-```bash
-git clone https://github.com/riju-talk/SpanBERT-CRF.git
-cd SpanBERT-CRF
-
-# with uv (recommended) — creates .venv and installs from uv.lock
-uv sync
-
-# or with pip
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
-```
-
-Verify:
-
-```bash
-python -c "import torch, transformers; print('torch', torch.__version__, '| cuda', torch.cuda.is_available())"
-pytest -m "not slow" -q
-```
-
----
-
-## Quick start
-
-### `main.py` — full pipeline
-
-`main.py` is the single entry point that trains **both** models end to end
-(QA on SQuAD v2.0, then NER on CoNLL‑2003), writes a checkpoint per stage, and
-drops a consolidated `models/pipeline_report.json`.
-
-```bash
-# full run with defaults (CRF on for both tasks)
-python main.py
-
-# small, fast configuration
-python main.py --max-train-samples 3000 --max-eval-samples 800 --num-epochs 3
-
-# NER only, with LoRA
-python main.py --tasks ner --use-lora --lora-r 16
-
-# validate wiring without training
-python main.py --dry-run
-
-# train both and push each checkpoint to the HF Hub
-python main.py --upload
-```
-
-The CRF head is part of the architecture and **on by default**; `--no-crf` is
-available purely for ablation.
-
-### `src.train` — single task
-
-For one task at a time with the lower‑level CLI:
-
-```bash
-python -m src.train --task qa  --use_crf --num_epochs 3 --batch_size 16
-python -m src.train --task ner --use_crf --num_epochs 10 --batch_size 16 --use_lora
-```
-
-### Standalone notebook
-
-[`spanbert-crf.ipynb`](spanbert-crf.ipynb) is fully self‑contained — the CRF,
-both model heads, the data pipeline and the training loop are defined in the
-notebook itself, so it runs on Colab with nothing but
-`pip install torch transformers datasets seqeval`. It fine‑tunes SpanBERT‑CRF on
-a **subset** of SQuAD v2.0 and CoNLL‑2003 and reports EM/F1 and entity‑level F1.
 
 ---
 
@@ -283,9 +204,3 @@ cannot be loaded (offline CI with a cold cache).
 - **CRF for sequence labelling** — [Lafferty et al., 2001](https://repository.upenn.edu/cis_papers/159/); implementation inspired by [`pytorch-crf`](https://github.com/kmkurn/pytorch-crf)
 - **Datasets** — [SQuAD v2.0](https://rajpurkar.github.io/SQuAD-explorer/), [CoNLL‑2003](https://www.clips.uantwerpen.be/conll2003/ner/)
 - **🤗 Transformers, Datasets, PEFT**
-
----
-
-## License
-
-[MIT](LICENSE) © Riju
